@@ -1,5 +1,6 @@
 'use client';
 
+import { useMemo } from 'react';
 import type { AnnotationType, AnnotationColor } from '@/types/annotations';
 
 export interface ToolbarProps {
@@ -38,6 +39,11 @@ export function AnnotationToolbar({
   onRedo,
   onClear,
 }: ToolbarProps) {
+  const mod = useMemo(
+    () => (typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl'),
+    []
+  );
+
   return (
     <div
       data-testid="annotation-toolbar"
@@ -90,14 +96,14 @@ export function AnnotationToolbar({
       {/* Undo / Redo */}
       <button
         onClick={onUndo}
-        title="Undo (Cmd+Z)"
+        title={`Undo (${mod}+Z)`}
         className="px-3 h-9 rounded-lg bg-gray-800 text-gray-300 hover:bg-gray-700 text-sm"
       >
         ↩
       </button>
       <button
         onClick={onRedo}
-        title="Redo (Cmd+Shift+Z)"
+        title={`Redo (${mod}+Shift+Z)`}
         className="px-3 h-9 rounded-lg bg-gray-800 text-gray-300 hover:bg-gray-700 text-sm"
       >
         ↪

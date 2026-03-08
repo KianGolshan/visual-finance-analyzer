@@ -54,6 +54,11 @@ export default function AnalyzePage({ params }: PageProps) {
       .catch(() => setDocStatus('error'));
   }, [docId]);
 
+  // Reset annotation count when document changes
+  useEffect(() => {
+    setAnnotationCount(0);
+  }, [documentImageUrl]);
+
   // Load the document once metadata is available
   useEffect(() => {
     if (!meta) return;
@@ -114,8 +119,8 @@ export default function AnalyzePage({ params }: PageProps) {
   // Keyboard shortcuts
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      const meta = e.metaKey || e.ctrlKey;
-      if (!meta) return;
+      const isMetaKey = e.metaKey || e.ctrlKey;
+      if (!isMetaKey) return;
       if (e.key === 'z' && !e.shiftKey) {
         e.preventDefault();
         canvasRef.current?.undo();
@@ -136,6 +141,7 @@ export default function AnalyzePage({ params }: PageProps) {
     try {
       const imageBase64 = canvasRef.current.getImageDataUrl();
       const annotations = canvasRef.current.getAnnotations();
+      const { width: canvasWidth, height: canvasHeight } = canvasRef.current.getCanvasDimensions();
 
       const res = await fetch('/api/analyze', {
         method: 'POST',
@@ -144,8 +150,8 @@ export default function AnalyzePage({ params }: PageProps) {
           imageBase64,
           annotationMetadata: {
             annotations,
-            canvasWidth: 900,
-            canvasHeight: 650,
+            canvasWidth,
+            canvasHeight,
             documentPage: currentPage,
           },
         }),
@@ -157,16 +163,9 @@ export default function AnalyzePage({ params }: PageProps) {
         return;
       }
       setAnalysisResult(data);
-
-      // Seed chat history with the initial result
-      setChatHistory([
-        {
-          role: 'assistant',
-          content: JSON.stringify(data.data ?? data.rawText, null, 2),
-        },
-      ]);
-    } catch {
-      setAnalysisError('Network error during analysis. Please try again.');
+      setChatHistory([]);
+    } catch (err) {
+      setAnalysisError(err instanceof Error ? err.message : 'Network error during analysis. Please try again.');
     } finally {
       setIsAnalyzing(false);
     }
@@ -180,10 +179,7 @@ export default function AnalyzePage({ params }: PageProps) {
       setIsChatLoading(true);
 
       const imageBase64 = canvasRef.current.getImageDataUrl();
-      const newHistory: ChatMessage[] = [
-        ...chatHistory,
-        { role: 'user', content: question },
-      ];
+      const { width: canvasWidth, height: canvasHeight } = canvasRef.current.getCanvasDimensions();
 
       try {
         const res = await fetch('/api/analyze', {
@@ -193,12 +189,12 @@ export default function AnalyzePage({ params }: PageProps) {
             imageBase64,
             annotationMetadata: {
               annotations: canvasRef.current.getAnnotations(),
-              canvasWidth: 900,
-              canvasHeight: 650,
+              canvasWidth,
+              canvasHeight,
               documentPage: currentPage,
             },
             followUpQuestion: question,
-            conversationHistory: newHistory,
+            conversationHistory: chatHistory,
           }),
         });
 
@@ -206,7 +202,8 @@ export default function AnalyzePage({ params }: PageProps) {
         const assistantMsg = data.rawText ?? 'No response.';
 
         setChatHistory([
-          ...newHistory,
+          ...chatHistory,
+          { role: 'user', content: question },
           { role: 'assistant', content: assistantMsg },
         ]);
         setChatInput('');
@@ -276,55 +273,61 @@ export default function AnalyzePage({ params }: PageProps) {
 
       <div className="flex flex-1 overflow-hidden">
         {/* Left: Canvas panel */}
-        <div className="flex flex-col flex-1 p-4 gap-3 min-w-0">
-          {/* Toolbar */}
-          <AnnotationToolbar
-            activeTool={activeTool}
-            activeColor={activeColor}
-            annotationCount={annotationCount}
-            onToolChange={setActiveTool}
-            onColorChange={setActiveColor}
-            onUndo={() => canvasRef.current?.undo()}
-            onRedo={() => canvasRef.current?.redo()}
-            onClear={() => canvasRef.current?.clear()}
-          />
-
-          {/* Canvas */}
-          {documentImageUrl ? (
-            <AnnotationCanvas
-              ref={canvasRef}
-              documentImageUrl={documentImageUrl}
+        <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
+          {/* Toolbar — fixed at top */}
+          <div className="px-4 pt-4 pb-2 shrink-0">
+            <AnnotationToolbar
               activeTool={activeTool}
               activeColor={activeColor}
-              onAnnotationCountChange={setAnnotationCount}
+              annotationCount={annotationCount}
+              onToolChange={setActiveTool}
+              onColorChange={setActiveColor}
+              onUndo={() => canvasRef.current?.undo()}
+              onRedo={() => canvasRef.current?.redo()}
+              onClear={() => canvasRef.current?.clear()}
             />
-          ) : (
-            <div className="flex-1 min-h-[500px] bg-gray-900 rounded-xl flex items-center justify-center">
-              <div className="text-gray-500 text-sm animate-pulse">
-                {docStatus === 'loading' ? 'Loading document...' : 'No document loaded.'}
-              </div>
-            </div>
-          )}
+          </div>
 
-          {/* Analyze button */}
-          <div className="flex items-center gap-3">
-            <button
-              data-testid="analyze-button"
-              onClick={handleAnalyze}
-              disabled={isAnalyzing || !documentImageUrl}
-              className="flex-1 py-3 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 disabled:text-gray-500 text-white font-semibold rounded-xl transition-colors"
-            >
-              {isAnalyzing ? 'Analyzing...' : 'Analyze Document'}
-            </button>
-            {annotationCount === 0 && documentImageUrl && (
-              <span className="text-xs text-gray-500">
-                Draw annotations first, or analyze the whole document.
-              </span>
+          {/* Canvas — scrollable, fills remaining height */}
+          <div className="flex-1 overflow-y-auto px-4 bg-gray-950">
+            {documentImageUrl ? (
+              <AnnotationCanvas
+                ref={canvasRef}
+                documentImageUrl={documentImageUrl}
+                activeTool={activeTool}
+                activeColor={activeColor}
+                onAnnotationCountChange={setAnnotationCount}
+              />
+            ) : (
+              <div className="h-full min-h-[500px] bg-gray-900 rounded-xl flex items-center justify-center">
+                <div className="text-gray-500 text-sm animate-pulse">
+                  {docStatus === 'loading' ? 'Loading document...' : 'No document loaded.'}
+                </div>
+              </div>
             )}
           </div>
-          {analysisError && (
-            <p className="text-sm text-red-400">{analysisError}</p>
-          )}
+
+          {/* Analyze button — fixed at bottom */}
+          <div className="px-4 py-3 shrink-0 border-t border-gray-800 bg-gray-950">
+            <div className="flex items-center gap-3">
+              <button
+                data-testid="analyze-button"
+                onClick={handleAnalyze}
+                disabled={isAnalyzing || !documentImageUrl}
+                className="flex-1 py-3 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 disabled:text-gray-500 text-white font-semibold rounded-xl transition-colors"
+              >
+                {isAnalyzing ? 'Analyzing...' : 'Analyze Document'}
+              </button>
+              {annotationCount === 0 && documentImageUrl && (
+                <span className="text-xs text-gray-500">
+                  Draw annotations first, or analyze the whole document.
+                </span>
+              )}
+            </div>
+            {analysisError && (
+              <p className="text-sm text-red-400 mt-2">{analysisError}</p>
+            )}
+          </div>
         </div>
 
         {/* Right: Results panel */}
@@ -350,7 +353,7 @@ export default function AnalyzePage({ params }: PageProps) {
                   Follow-up Chat
                 </h3>
                 <div className="max-h-48 overflow-y-auto space-y-2">
-                  {chatHistory.slice(1).map((msg, i) => (
+                  {chatHistory.map((msg, i) => (
                     <div
                       key={i}
                       className={`text-xs px-3 py-2 rounded-lg ${

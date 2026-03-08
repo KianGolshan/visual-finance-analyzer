@@ -10,15 +10,22 @@ import { buildSystemPrompt, buildUserPrompt, buildFollowUpPrompt } from './promp
 import { extractBase64, extractMediaType } from './imageProcessor';
 
 function parseClaudeResponse(text: string): { data?: InsightResponse; rawText: string } {
-  try {
-    // Extract JSON from response (may be wrapped in markdown code block)
-    const jsonMatch = text.match(/```json\s*([\s\S]*?)\s*```/) ?? text.match(/(\{[\s\S]*\})/);
-    const jsonString = jsonMatch ? jsonMatch[1] : text;
-    const parsed = JSON.parse(jsonString) as InsightResponse;
-    return { data: parsed, rawText: text };
-  } catch {
-    return { rawText: text };
+  // Try fenced code block first, then bare JSON object
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+  const bare = text.match(/\{[\s\S]*\}/);
+  const candidates = [fenced?.[1], bare?.[0]].filter(Boolean) as string[];
+
+  for (const candidate of candidates) {
+    try {
+      const parsed = JSON.parse(candidate) as InsightResponse;
+      if (parsed && typeof parsed === 'object') {
+        return { data: parsed, rawText: text };
+      }
+    } catch {
+      // try next candidate
+    }
   }
+  return { rawText: text };
 }
 
 export async function analyzeDocument(
@@ -89,7 +96,8 @@ export async function analyzeWithHistory(
     | 'image/webp'
     | 'image/gif';
 
-  // Build messages array: include image in every turn for persistent visual context
+  // Prior turns are text-only (image already sent in the initial analysis turn).
+  // The new user message re-attaches the image so Claude retains visual context.
   const messages: Anthropic.MessageParam[] = conversationHistory.map((msg) => ({
     role: msg.role,
     content: msg.content,

@@ -20,8 +20,10 @@ vi.mock('fabric', () => {
     selection: false,
     freeDrawingBrush: null,
     backgroundImage: null,
+    lowerCanvasEl: null,
     width: 800,
     height: 600,
+    _objects: [] as any[],
   };
 
   // Must use regular function (not arrow) so `new Canvas()` works as a constructor

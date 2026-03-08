@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import type { AnnotationInsight, ConfidenceLevel, InsightResponse } from '@/types/analysis';
 
 interface AnalysisPanelProps {
@@ -44,14 +44,18 @@ function InsightCard({ insight }: { insight: AnnotationInsight }) {
 
 export function AnalysisPanel({ data, rawText, onFollowUpQuestion }: AnalysisPanelProps) {
   const [showRaw, setShowRaw] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   const handleExport = () => {
     window.print();
   };
 
-  const handleCopyJson = () => {
-    navigator.clipboard.writeText(rawText).catch(() => {});
-  };
+  const handleCopyJson = useCallback(() => {
+    navigator.clipboard.writeText(rawText).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }).catch(() => {});
+  }, [rawText]);
 
   return (
     <div data-testid="analysis-panel" className="flex flex-col gap-4 h-full overflow-y-auto">
@@ -64,14 +68,14 @@ export function AnalysisPanel({ data, rawText, onFollowUpQuestion }: AnalysisPan
             onClick={handleExport}
             className="text-xs px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-gray-200 rounded-lg transition-colors"
           >
-            Export as PDF
+            Print / Save as PDF
           </button>
           <button
             data-testid="copy-json-button"
             onClick={handleCopyJson}
             className="text-xs px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-gray-200 rounded-lg transition-colors"
           >
-            {showRaw ? 'Hide JSON' : 'Copy JSON'}
+            {copied ? 'Copied!' : 'Copy JSON'}
           </button>
           <button
             onClick={() => setShowRaw((v) => !v)}

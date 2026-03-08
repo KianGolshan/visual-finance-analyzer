@@ -19,17 +19,32 @@ export async function POST(request: NextRequest): Promise<NextResponse<AnalyzeRe
     );
   }
 
-  // Follow-up chat turn
-  if (body.followUpQuestion && body.conversationHistory) {
-    const result = await analyzeWithHistory(
-      body.imageBase64,
-      body.conversationHistory,
-      body.followUpQuestion
+  if (!process.env.ANTHROPIC_API_KEY) {
+    return NextResponse.json(
+      { success: false, error: 'ANTHROPIC_API_KEY is not configured. Add it to .env.local and restart the dev server.' },
+      { status: 500 }
     );
-    return NextResponse.json(result);
   }
 
-  // Initial analysis
-  const result = await analyzeDocument(body.imageBase64, body.annotationMetadata);
-  return NextResponse.json(result);
+  try {
+    // Follow-up chat turn
+    if (body.followUpQuestion && body.conversationHistory) {
+      const result = await analyzeWithHistory(
+        body.imageBase64,
+        body.conversationHistory,
+        body.followUpQuestion
+      );
+      return NextResponse.json(result);
+    }
+
+    // Initial analysis
+    const result = await analyzeDocument(body.imageBase64, body.annotationMetadata);
+    return NextResponse.json(result);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return NextResponse.json(
+      { success: false, error: `Analysis failed: ${message}` },
+      { status: 500 }
+    );
+  }
 }
