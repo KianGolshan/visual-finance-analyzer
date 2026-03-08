@@ -38,6 +38,12 @@ yarn-error.log*
 # uploads
 tmp/
 
+# Claude Code internal files
+.claude/
+
+# Generated assets (copied from node_modules at build time)
+public/pdf.worker.min.mjs
+
 # test artifacts
 playwright-report/
 test-results/
